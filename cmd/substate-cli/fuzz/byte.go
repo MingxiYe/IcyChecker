@@ -1,7 +1,5 @@
 package fuzz
 
-import "math/big"
-
 type solidityByte Type
 
 func (self solidityByte) String() string {
@@ -83,11 +81,11 @@ var (
 )
 
 func (self solidityByte) getSlice(value interface{}) interface{} {
-	var Max, v *big.Int
-	(*Max).SetString(ByteMax[int(self.size())], 0)
-	(*v).SetString(value.(string), 0)
-	v = v.And(v, Max)
-	return BigInt(*v).String()
+	valueByte := []byte(value.(string))
+	if len(valueByte) > int(self.size()) {
+		valueByte = valueByte[len(valueByte)-int(self.size()):]
+	}
+	return string(valueByte)
 }
 
 func (self solidityByte) fuzz(timestamp uint64) ([]interface{}, error) {

@@ -31,7 +31,7 @@ var ReplaySICommand = cli.Command{
 	Action:    replaySIAction,
 	Name:      "replay-SI",
 	Usage:     "executes full state transitions and check state consistency",
-	ArgsUsage: "<blockNumFirst> <blockNumLast> --dappDir <dappFolderPath> --substateDir <substatePath>",
+	ArgsUsage: "<blockNumFirst> <blockNumLast> --dappDir <path-to-dapp.dir> --substateDir <path-to-recorder.datadir>",
 	Flags: []cli.Flag{
 		research.WorkersFlag,
 		research.SkipEnvFlag,
@@ -44,12 +44,12 @@ var ReplaySICommand = cli.Command{
 	},
 	Description: `
 The substate-cli replay-mt command requires four arguments:
-<blockNumFirst> <blockNumLast> <dappFolderPath> <substatePath>
+<blockNumFirst> <blockNumLast> <path-to-dapp.dir> <path-to-recorder.datadir>
 
 <blockNumFirst> and <blockNumLast> are the first and
 last block of the inclusive range of blocks to replay transactions.
 
-<dappFolderPath> and <substatePath> are the path of dapp data folder 
+<path-to-dapp.dir> and <path-to-recorder.datadir> are the path of dapp data folder 
 and the path of substate that previously replay`,
 }
 
@@ -128,8 +128,10 @@ func replaySITask(block uint64, tx int, substate *research.Substate, taskPool *r
 			var keys []int
 			pastBlockSubstate := taskPool.DB.GetBlockSubstates(pastBlock)
 			for tx, substate := range pastBlockSubstate {
-				msgToAddr := substate.Message.To.String()
-				if !containByList(fuzz.GetInnerValueList(), msgToAddr) {
+				if substate.Message.To == nil ||
+					!containByList(
+						fuzz.GetInnerValueList(),
+						strings.ToLower(substate.Message.To.String())) {
 					continue
 				}
 				keys = append(keys, tx)
@@ -261,9 +263,9 @@ func replayWithEnvMR(block uint64, tx int, substate *research.Substate, taskPool
 		return err
 	}
 
-	if addr, a := oriAlloc.InnerStateEqual(mutAlloc); !a {
+	if addr, a := oriAlloc.AllStateEqual(mutAlloc); !a {
 		// write bug detailed information
-		bugFile := taskPool.DappDir + "output/" + addr + "_" +
+		bugFile := taskPool.DappDir + "/output/" + addr + "_" +
 			strconv.FormatUint(oriEnv.Number, 10) + ".json"
 		bugDetails := &SIbug{
 			BugType:          "ENV",
@@ -429,9 +431,9 @@ func replayWithTodMR(block uint64, tx int, substate *research.Substate, taskPool
 		}
 		research.UpdateSubstate(&reverseAlloc, tempAlloc, false, true)
 
-		if addr, a := obverseAlloc.InnerStateEqual(reverseAlloc); !a {
+		if addr, a := obverseAlloc.AllStateEqual(reverseAlloc); !a {
 			// write bug information
-			bugFile := taskPool.DappDir + "output/" + addr + "_" +
+			bugFile := taskPool.DappDir + "/output/" + addr + "_" +
 				strconv.FormatUint(env.Number, 10) + ".json"
 			bugDetails := &SIbug{
 				BugType:          "TOD",
@@ -605,9 +607,9 @@ func replayWithManiMR(block uint64, tx int, substate *research.Substate, taskPoo
 		}
 		research.UpdateSubstate(&reverseAlloc, tempAlloc, false, true)
 
-		if addr, a := obverseAlloc.InnerStateEqual(reverseAlloc); !a {
+		if addr, a := obverseAlloc.AllStateEqual(reverseAlloc); !a {
 			// write bug information
-			bugFile := taskPool.DappDir + "output/" + addr + "_" +
+			bugFile := taskPool.DappDir + "/output/" + addr + "_" +
 				strconv.FormatUint(env.Number, 10) + ".json"
 			bugDetails := &SIbug{
 				BugType:          "MANI",
@@ -791,9 +793,9 @@ func replayWithHook(block uint64, tx int, substate *research.Substate, taskPool 
 		}
 		hookAlloc = statedb.ResearchPostAlloc
 
-		if addr, a := outAlloc.InnerStateEqual(hookAlloc); !a && hookResult.Err == nil {
+		if addr, a := outAlloc.AllStateEqual(hookAlloc); !a && hookResult.Err == nil {
 			// write bug information
-			bugDir := taskPool.DappDir + "output/" + addr + "_" +
+			bugDir := taskPool.DappDir + "/output/" + addr + "_" +
 				strconv.FormatUint(inputEnv.Number, 10) + ".json"
 			bugDetails := &SIbug{
 				BugType:          "HOOK",

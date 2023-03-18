@@ -69,12 +69,11 @@ func UpdateGlobalSeed(data []byte, block uint64) {
 
 func UpdateGlobalSeeds(data []byte, block uint64) {
 	var parameterList []byte
-	if string(data[0:2]) == "0x" {
-		parameterList = data[10:]
-	} else {
-		parameterList = data[8:]
+	if len(data) <= 4 {
+		return
 	}
-	for i := 0; i < len(parameterList); i += 32 {
+	parameterList = data[4:]
+	for i := 0; i+32 <= len(parameterList); i += 32 {
 		parameter := parameterList[i : i+32]
 		UpdateGlobalSeed(parameter, block)
 	}
