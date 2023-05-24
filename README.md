@@ -53,7 +53,7 @@ For example, if you want to replay transactions from block 13,000,001 to block 1
 # Build the source
 make all
 
-./build/bin/substate-cli replay-mt 13000001 14000000 --dappDir <path-to-dapp.dir> -- substateDir <path-to-recorder.datadir>
+./build/bin/substate-cli replay-mt 13000001 14000000 --dappDir <path-to-dappDir> --substateDir <path-to-recorder-datadir>
 ```
 
 Here are command line options for `substate-cli replay-SI`:

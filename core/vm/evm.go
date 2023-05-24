@@ -244,14 +244,16 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	return ret, gas, err
 }
 
-func (evm *EVM) CallWithHook(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int, dappInner []string, vimAddr string, msgData string) (ret []byte, leftOverGas uint64, err error) {
+func (evm *EVM) CallWithHook(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int, dappInner []string, vimAddr string, msgData string) (ret []byte, leftOverGas uint64, err error, isHook bool) {
+	isHook = false
+
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
-		return nil, gas, ErrDepth
+		return nil, gas, ErrDepth, isHook
 	}
 	// Fail if we're trying to transfer more than the available balance
 	if value.Sign() != 0 && !evm.Context.CanTransfer(evm.StateDB, caller.Address(), value) {
-		return nil, gas, ErrInsufficientBalance
+		return nil, gas, ErrInsufficientBalance, isHook
 	}
 	snapshot := evm.StateDB.Snapshot()
 	p, isPrecompile := evm.precompile(addr)
@@ -268,7 +270,7 @@ func (evm *EVM) CallWithHook(caller ContractRef, addr common.Address, input []by
 					evm.Config.Tracer.CaptureExit(ret, 0, nil)
 				}
 			}
-			return nil, gas, nil
+			return nil, gas, nil, isHook
 		}
 		evm.StateDB.CreateAccount(addr)
 	}
@@ -312,9 +314,10 @@ func (evm *EVM) CallWithHook(caller ContractRef, addr common.Address, input []by
 				}
 			}
 			if flag == true {
-				ret, err = evm.interpreter.RunWithHook(contract, input, false, dappInner, vimAddr, msgData)
+				ret, err, isHook = evm.interpreter.RunWithHook(contract, input, false, dappInner, vimAddr, msgData)
 			} else {
 				ret, err = evm.interpreter.RunInHook(contract, input, false, vimAddr, msgData)
+				isHook = true
 			}
 			gas = contract.Gas
 		}
@@ -331,7 +334,7 @@ func (evm *EVM) CallWithHook(caller ContractRef, addr common.Address, input []by
 		//} else {
 		//	evm.StateDB.DiscardSnapshot(snapshot)
 	}
-	return ret, gas, err
+	return ret, gas, err, isHook
 }
 
 // CallCode executes the contract associated with the addr with the given input
@@ -384,17 +387,19 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 	return ret, gas, err
 }
 
-func (evm *EVM) CallCodeWithHook(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int, dappInner []string, vimAddr string, msgData string) (ret []byte, leftOverGas uint64, err error) {
+func (evm *EVM) CallCodeWithHook(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int, dappInner []string, vimAddr string, msgData string) (ret []byte, leftOverGas uint64, err error, isHook bool) {
+	isHook = false
+
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
-		return nil, gas, ErrDepth
+		return nil, gas, ErrDepth, isHook
 	}
 	// Fail if we're trying to transfer more than the available balance
 	// Note although it's noop to transfer X ether to caller itself. But
 	// if caller doesn't have enough balance, it would be an error to allow
 	// over-charging itself. So the check here is necessary.
 	if !evm.Context.CanTransfer(evm.StateDB, caller.Address(), value) {
-		return nil, gas, ErrInsufficientBalance
+		return nil, gas, ErrInsufficientBalance, isHook
 	}
 	var snapshot = evm.StateDB.Snapshot()
 
@@ -423,9 +428,10 @@ func (evm *EVM) CallCodeWithHook(caller ContractRef, addr common.Address, input 
 			}
 		}
 		if flag == true {
-			ret, err = evm.interpreter.RunWithHook(contract, input, false, dappInner, vimAddr, msgData)
+			ret, err, isHook = evm.interpreter.RunWithHook(contract, input, false, dappInner, vimAddr, msgData)
 		} else {
 			ret, err = evm.interpreter.RunInHook(contract, input, false, vimAddr, msgData)
+			isHook = true
 		}
 		gas = contract.Gas
 	}
@@ -435,7 +441,7 @@ func (evm *EVM) CallCodeWithHook(caller ContractRef, addr common.Address, input 
 			gas = 0
 		}
 	}
-	return ret, gas, err
+	return ret, gas, err, isHook
 }
 
 // DelegateCall executes the contract associated with the addr with the given input
@@ -478,10 +484,12 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []by
 	return ret, gas, err
 }
 
-func (evm *EVM) DelegateCallWithHook(caller ContractRef, addr common.Address, input []byte, gas uint64, dappInner []string, vimAddr string, msgData string) (ret []byte, leftOverGas uint64, err error) {
+func (evm *EVM) DelegateCallWithHook(caller ContractRef, addr common.Address, input []byte, gas uint64, dappInner []string, vimAddr string, msgData string) (ret []byte, leftOverGas uint64, err error, isHook bool) {
+	isHook = false
+
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
-		return nil, gas, ErrDepth
+		return nil, gas, ErrDepth, isHook
 	}
 	var snapshot = evm.StateDB.Snapshot()
 
@@ -509,9 +517,10 @@ func (evm *EVM) DelegateCallWithHook(caller ContractRef, addr common.Address, in
 			}
 		}
 		if flag == true {
-			ret, err = evm.interpreter.RunWithHook(contract, input, false, dappInner, vimAddr, msgData)
+			ret, err, isHook = evm.interpreter.RunWithHook(contract, input, false, dappInner, vimAddr, msgData)
 		} else {
 			ret, err = evm.interpreter.RunInHook(contract, input, false, vimAddr, msgData)
+			isHook = true
 		}
 		gas = contract.Gas
 	}
@@ -521,7 +530,7 @@ func (evm *EVM) DelegateCallWithHook(caller ContractRef, addr common.Address, in
 			gas = 0
 		}
 	}
-	return ret, gas, err
+	return ret, gas, err, isHook
 }
 
 // StaticCall executes the contract associated with the addr with the given input

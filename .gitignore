@@ -52,4 +52,6 @@ profile.cov
 /pythonScripts
 /substate.ethereum
 /error.log
+/log.txt
 /cmd/substate-cli/error.log
+/demo

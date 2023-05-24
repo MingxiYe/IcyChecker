@@ -731,7 +731,7 @@ func opCallInHook(interpreter *EVMInterpreter, scope *ScopeContext, vimAddr stri
 	return ret, nil
 }
 
-func opCallWithHook(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext, dappInner []string, vimAddr string, msgData string) ([]byte, error) {
+func opCallWithHook(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext, dappInner []string, vimAddr string, msgData string) ([]byte, error, bool) {
 	stack := scope.Stack
 	// Pop gas. The actual gas in interpreter.evm.callGasTemp.
 	// We can use this as a temporary value
@@ -744,7 +744,7 @@ func opCallWithHook(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 	args := scope.Memory.GetPtr(int64(inOffset.Uint64()), int64(inSize.Uint64()))
 
 	if interpreter.readOnly && !value.IsZero() {
-		return nil, ErrWriteProtection
+		return nil, ErrWriteProtection, false
 	}
 	var bigVal = big0
 	//TODO: use uint256.Int instead of converting with toBig()
@@ -755,7 +755,7 @@ func opCallWithHook(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 		bigVal = value.ToBig()
 	}
 
-	ret, returnGas, err := interpreter.evm.CallWithHook(scope.Contract, toAddr, args, gas, bigVal, dappInner, vimAddr, msgData)
+	ret, returnGas, err, isHook := interpreter.evm.CallWithHook(scope.Contract, toAddr, args, gas, bigVal, dappInner, vimAddr, msgData)
 
 	if err != nil {
 		temp.Clear()
@@ -770,7 +770,7 @@ func opCallWithHook(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 	scope.Contract.Gas += returnGas
 
 	interpreter.returnData = ret
-	return ret, nil
+	return ret, nil, isHook
 }
 
 func opCallCode(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
@@ -809,7 +809,7 @@ func opCallCode(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 	return ret, nil
 }
 
-func opCallCodeWithHook(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext, dappInner []string, vimAddr string, msgData string) ([]byte, error) {
+func opCallCodeWithHook(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext, dappInner []string, vimAddr string, msgData string) ([]byte, error, bool) {
 	// Pop gas. The actual gas is in interpreter.evm.callGasTemp.
 	stack := scope.Stack
 	// We use it as a temporary value
@@ -828,7 +828,7 @@ func opCallCodeWithHook(pc *uint64, interpreter *EVMInterpreter, scope *ScopeCon
 		bigVal = value.ToBig()
 	}
 
-	ret, returnGas, err := interpreter.evm.CallCodeWithHook(scope.Contract, toAddr, args, gas, bigVal, dappInner, vimAddr, msgData)
+	ret, returnGas, err, isHook := interpreter.evm.CallCodeWithHook(scope.Contract, toAddr, args, gas, bigVal, dappInner, vimAddr, msgData)
 	if err != nil {
 		temp.Clear()
 	} else {
@@ -842,7 +842,7 @@ func opCallCodeWithHook(pc *uint64, interpreter *EVMInterpreter, scope *ScopeCon
 	scope.Contract.Gas += returnGas
 
 	interpreter.returnData = ret
-	return ret, nil
+	return ret, nil, isHook
 }
 
 func opDelegateCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
@@ -874,7 +874,7 @@ func opDelegateCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 	return ret, nil
 }
 
-func opDelegateCallWithHook(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext, dappInner []string, vimAddr string, msgData string) ([]byte, error) {
+func opDelegateCallWithHook(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext, dappInner []string, vimAddr string, msgData string) ([]byte, error, bool) {
 	stack := scope.Stack
 	// Pop gas. The actual gas is in interpreter.evm.callGasTemp.
 	// We use it as a temporary value
@@ -886,7 +886,7 @@ func opDelegateCallWithHook(pc *uint64, interpreter *EVMInterpreter, scope *Scop
 	// Get arguments from the memory.
 	args := scope.Memory.GetPtr(int64(inOffset.Uint64()), int64(inSize.Uint64()))
 
-	ret, returnGas, err := interpreter.evm.DelegateCallWithHook(scope.Contract, toAddr, args, gas, dappInner, vimAddr, msgData)
+	ret, returnGas, err, isHook := interpreter.evm.DelegateCallWithHook(scope.Contract, toAddr, args, gas, dappInner, vimAddr, msgData)
 	if err != nil {
 		temp.Clear()
 	} else {
@@ -900,7 +900,7 @@ func opDelegateCallWithHook(pc *uint64, interpreter *EVMInterpreter, scope *Scop
 	scope.Contract.Gas += returnGas
 
 	interpreter.returnData = ret
-	return ret, nil
+	return ret, nil, isHook
 }
 
 func opStaticCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {

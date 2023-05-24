@@ -637,6 +637,7 @@ func replayWithManiMR(block uint64, tx int, substate *research.Substate, taskPoo
 	return nil
 }
 
+// no CALL in hook and successfully execute additional msg -> inconsisitency (false alarm)
 func replayWithHook(block uint64, tx int, substate *research.Substate, taskPool *research.SubstateTaskPool, localUsers []string, localContracts []string) error {
 
 	inputAlloc := substate.InputAlloc
@@ -772,7 +773,7 @@ func replayWithHook(block uint64, tx int, substate *research.Substate, taskPool 
 		evm := vm.NewEVM(blockCtx, txCtx, statedb, chainConfig, vmConfig)
 		snapshot := statedb.Snapshot()
 		msg = msg[2:]
-		hookResult, err := core.ApplyMessageWithHook(
+		hookResult, err, isHook := core.ApplyMessageWithHook(
 			evm,
 			inputMsg,
 			gaspool,
@@ -780,7 +781,7 @@ func replayWithHook(block uint64, tx int, substate *research.Substate, taskPool 
 			targetedAddress[index],
 			msg)
 
-		if err != nil {
+		if err != nil || isHook == false {
 			statedb.RevertToSnapshot(snapshot)
 			return err
 		} else if hashError != nil {

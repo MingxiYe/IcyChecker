@@ -410,7 +410,8 @@ func (in *EVMInterpreter) RunInHook(contract *Contract, input []byte, readOnly b
 	return res, err
 }
 
-func (in *EVMInterpreter) RunWithHook(contract *Contract, input []byte, readOnly bool, dappInner []string, vimAddr string, msgData string) (ret []byte, err error) {
+func (in *EVMInterpreter) RunWithHook(contract *Contract, input []byte, readOnly bool, dappInner []string, vimAddr string, msgData string) (ret []byte, err error, isHook bool) {
+	isHook = false
 
 	// Increment the call depth which is restricted to 1024
 	in.evm.depth++
@@ -429,7 +430,7 @@ func (in *EVMInterpreter) RunWithHook(contract *Contract, input []byte, readOnly
 
 	// Don't bother with the execution if there's no code.
 	if len(contract.Code) == 0 {
-		return nil, nil
+		return nil, nil, isHook
 	}
 
 	var (
@@ -487,12 +488,12 @@ func (in *EVMInterpreter) RunWithHook(contract *Contract, input []byte, readOnly
 		cost = operation.constantGas // For tracing
 		// Validate stack
 		if sLen := stack.len(); sLen < operation.minStack {
-			return nil, &ErrStackUnderflow{stackLen: sLen, required: operation.minStack}
+			return nil, &ErrStackUnderflow{stackLen: sLen, required: operation.minStack}, isHook
 		} else if sLen > operation.maxStack {
-			return nil, &ErrStackOverflow{stackLen: sLen, limit: operation.maxStack}
+			return nil, &ErrStackOverflow{stackLen: sLen, limit: operation.maxStack}, isHook
 		}
 		if !contract.UseGas(cost) {
-			return nil, ErrOutOfGas
+			return nil, ErrOutOfGas, isHook
 		}
 		if operation.dynamicGas != nil {
 			// All ops with a dynamic memory usage also has a dynamic gas cost.
@@ -504,12 +505,12 @@ func (in *EVMInterpreter) RunWithHook(contract *Contract, input []byte, readOnly
 			if operation.memorySize != nil {
 				memSize, overflow := operation.memorySize(stack)
 				if overflow {
-					return nil, ErrGasUintOverflow
+					return nil, ErrGasUintOverflow, isHook
 				}
 				// memory is expanded in words of 32 bytes. Gas
 				// is also calculated in words.
 				if memorySize, overflow = math.SafeMul(toWordSize(memSize), 32); overflow {
-					return nil, ErrGasUintOverflow
+					return nil, ErrGasUintOverflow, isHook
 				}
 			}
 			// Consume the gas and return an error if not enough gas is available.
@@ -518,7 +519,7 @@ func (in *EVMInterpreter) RunWithHook(contract *Contract, input []byte, readOnly
 			dynamicCost, err = operation.dynamicGas(in.evm, contract, stack, mem, memorySize)
 			cost += dynamicCost // for tracing
 			if err != nil || !contract.UseGas(dynamicCost) {
-				return nil, ErrOutOfGas
+				return nil, ErrOutOfGas, isHook
 			}
 			if memorySize > 0 {
 				mem.Resize(memorySize)
@@ -531,11 +532,23 @@ func (in *EVMInterpreter) RunWithHook(contract *Contract, input []byte, readOnly
 		// execute the operation
 		switch op.String() {
 		case "CALL":
-			res, err = opCallWithHook(&pc, in, callContext, dappInner, vimAddr, msgData)
+			if isHook == true {
+				res, err, _ = opCallWithHook(&pc, in, callContext, dappInner, vimAddr, msgData)
+			} else {
+				res, err, isHook = opCallWithHook(&pc, in, callContext, dappInner, vimAddr, msgData)
+			}
 		case "CALLCODE":
-			res, err = opCallCodeWithHook(&pc, in, callContext, dappInner, vimAddr, msgData)
+			if isHook == true {
+				res, err, _ = opCallCodeWithHook(&pc, in, callContext, dappInner, vimAddr, msgData)
+			} else {
+				res, err, isHook = opCallCodeWithHook(&pc, in, callContext, dappInner, vimAddr, msgData)
+			}
 		case "DELEGATECALL":
-			res, err = opDelegateCallWithHook(&pc, in, callContext, dappInner, vimAddr, msgData)
+			if isHook == true {
+				res, err, _ = opDelegateCallWithHook(&pc, in, callContext, dappInner, vimAddr, msgData)
+			} else {
+				res, err, isHook = opDelegateCallWithHook(&pc, in, callContext, dappInner, vimAddr, msgData)
+			}
 		default:
 			res, err = operation.execute(&pc, in, callContext)
 		}
@@ -549,5 +562,5 @@ func (in *EVMInterpreter) RunWithHook(contract *Contract, input []byte, readOnly
 		err = nil // clear stop token error
 	}
 
-	return res, err
+	return res, err, isHook
 }

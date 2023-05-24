@@ -181,7 +181,7 @@ func ApplyMessage(evm *vm.EVM, msg Message, gp *GasPool) (*ExecutionResult, erro
 	return NewStateTransition(evm, msg, gp).TransitionDb()
 }
 
-func ApplyMessageWithHook(evm *vm.EVM, msg Message, gp *GasPool, dappInner []string, vimAddr string, msgData string) (*ExecutionResult, error) {
+func ApplyMessageWithHook(evm *vm.EVM, msg Message, gp *GasPool, dappInner []string, vimAddr string, msgData string) (*ExecutionResult, error, bool) {
 	return NewStateTransition(evm, msg, gp).TransitionDbWithHook(dappInner, vimAddr, msgData)
 }
 
@@ -349,7 +349,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	}, nil
 }
 
-func (st *StateTransition) TransitionDbWithHook(dappInner []string, vimAddr string, msgData string) (*ExecutionResult, error) {
+func (st *StateTransition) TransitionDbWithHook(dappInner []string, vimAddr string, msgData string) (*ExecutionResult, error, bool) {
 	// First check this message satisfies all consensus rules before
 	// applying the message. The rules include these clauses
 	//
@@ -360,9 +360,11 @@ func (st *StateTransition) TransitionDbWithHook(dappInner []string, vimAddr stri
 	// 5. there is no overflow when calculating intrinsic gas
 	// 6. caller has enough balance to cover asset transfer for **topmost** call
 
+	isHook := false
+
 	// Check clauses 1-3, buy gas if everything is correct
 	if err := st.preCheck(); err != nil {
-		return nil, err
+		return nil, err, isHook
 	}
 	msg := st.msg
 	sender := vm.AccountRef(msg.From())
@@ -374,16 +376,16 @@ func (st *StateTransition) TransitionDbWithHook(dappInner []string, vimAddr stri
 	// Check clauses 4-5, subtract intrinsic gas if everything is correct
 	gas, err := IntrinsicGas(st.data, st.msg.AccessList(), contractCreation, homestead, istanbul)
 	if err != nil {
-		return nil, err
+		return nil, err, isHook
 	}
 	if st.gas < gas {
-		return nil, fmt.Errorf("%w: have %d, want %d", ErrIntrinsicGas, st.gas, gas)
+		return nil, fmt.Errorf("%w: have %d, want %d", ErrIntrinsicGas, st.gas, gas), isHook
 	}
 	st.gas -= gas
 
 	// Check clause 6
 	if msg.Value().Sign() > 0 && !st.evm.Context.CanTransfer(st.state, msg.From(), msg.Value()) {
-		return nil, fmt.Errorf("%w: address %v", ErrInsufficientFundsForTransfer, msg.From().Hex())
+		return nil, fmt.Errorf("%w: address %v", ErrInsufficientFundsForTransfer, msg.From().Hex()), isHook
 	}
 
 	// Set up the initial access list.
@@ -399,7 +401,7 @@ func (st *StateTransition) TransitionDbWithHook(dappInner []string, vimAddr stri
 	} else {
 		// Increment the nonce for the next transaction
 		st.state.SetNonce(msg.From(), st.state.GetNonce(sender.Address())+1)
-		ret, st.gas, vmerr = st.evm.CallWithHook(sender, st.to(), st.data, st.gas, st.value, dappInner, vimAddr, msgData)
+		ret, st.gas, vmerr, isHook = st.evm.CallWithHook(sender, st.to(), st.data, st.gas, st.value, dappInner, vimAddr, msgData)
 	}
 
 	if !london {
@@ -419,7 +421,7 @@ func (st *StateTransition) TransitionDbWithHook(dappInner []string, vimAddr stri
 		UsedGas:    st.gasUsed(),
 		Err:        vmerr,
 		ReturnData: ret,
-	}, nil
+	}, nil, isHook
 }
 
 func (st *StateTransition) refundGas(refundQuotient uint64) {
