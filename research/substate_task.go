@@ -48,6 +48,10 @@ var (
 		Name:  "rich-info",
 		Usage: "Rich Substate",
 	}
+	GigahorseFlag = cli.StringFlag{
+		Name:  "gigahorse",
+		Usage: "Use Gigahorse",
+	}
 	DappDirFlag = cli.StringFlag{
 		Name:  "dappDir",
 		Usage: "the path for targeted dapp data",
@@ -70,7 +74,8 @@ type SubstateTaskPool struct {
 	SkipMani bool
 	SkipHook bool
 
-	DappDir string
+	Gigahorse string
+	DappDir   string
 
 	Ctx *cli.Context // CLI context required to read additional flags
 
@@ -92,7 +97,8 @@ func NewSubstateTaskPool(name string, taskFunc SubstateTaskFunc, first, last uin
 		SkipHook: ctx.Bool(SkipHookFlag.Name),
 		RichInfo: ctx.Bool(RichInfoFlag.Name),
 
-		DappDir: ctx.String(DappDirFlag.Name),
+		Gigahorse: ctx.String(GigahorseFlag.Name),
+		DappDir:   ctx.String(DappDirFlag.Name),
 
 		Ctx: ctx,
 
