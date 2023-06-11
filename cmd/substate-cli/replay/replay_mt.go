@@ -2,6 +2,7 @@ package replay
 
 import (
 	"bufio"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 	"math/big"
 	"math/rand"
 	"os"
+	"os/exec"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -39,6 +42,7 @@ var ReplaySICommand = cli.Command{
 		research.SkipManiFlag,
 		research.SkipHookFlag,
 		research.RichInfoFlag,
+		research.GigahorseFlag,
 		research.SubstateDirFlag,
 		research.DappDirFlag,
 	},
@@ -206,14 +210,14 @@ func replaySITask(block uint64, tx int, substate *research.Substate, taskPool *r
 		}
 	}
 
-	if !taskPool.SkipMani {
-		err = replayWithManiMR(block, tx, substate, taskPool, localUsers, localContracts)
-		if err != nil &&
-			strings.Index(err.Error(), "inconsistent output") == -1 &&
-			strings.Index(err.Error(), "insufficient funds") == -1 {
-			errorstrings = append(errorstrings, err.Error())
-		}
-	}
+	// if !taskPool.SkipMani {
+	// 	err = replayWithManiMR(block, tx, substate, taskPool, localUsers, localContracts)
+	// 	if err != nil &&
+	// 		strings.Index(err.Error(), "inconsistent output") == -1 &&
+	// 		strings.Index(err.Error(), "insufficient funds") == -1 {
+	// 		errorstrings = append(errorstrings, err.Error())
+	// 	}
+	// }
 
 	if !taskPool.SkipHook {
 		err = replayWithHook(block, tx, substate, taskPool, localUsers, localContracts)
@@ -990,6 +994,75 @@ func initGlobalEnv(ctx *cli.Context, taskPool *research.SubstateTaskPool) error 
 		}
 	}
 	return nil
+}
+
+func msgbuilder(targetedContracts []string, block uint64, localUsers []string, localContracts2IndexList map[string][]int, taskPool *research.SubstateTaskPool) ([]string, []string, []string, error) {
+	// generate additional messages
+	var (
+		addrs []string
+		msgs  []string
+		rets  []string
+		err   error
+	)
+
+	keys := make([]string, 0, len(localContracts2IndexList))
+	for k := range localContracts2IndexList {
+		keys = append(keys, k)
+	}
+
+	if taskPool.Gigahorse != "" {
+		targetedContract2Function := make(map[string][]string)
+		for contract, indexList := range localContracts2IndexList {
+			targetedContract2Function[contract] = runGigahorse(contract, indexList, taskPool.Gigahorse)
+			addrs, msgs, rets, err = fuzz.MsgBuilder2(
+				targetedContract2Function,
+				block,
+				localUsers,
+				keys)
+		}
+	} else {
+		addrs, msgs, rets, err = fuzz.MsgBuilder(
+			fuzz.ConvertInterfaceSlice2StringSlice(fuzz.GetInnerValueList()),
+			block,
+			localUsers,
+			keys)
+	}
+	return addrs, msgs, rets, err
+}
+
+func runGigahorse(contract string, indexList []int, gigahorsePath string) []string {
+	result := []string{}
+	contractAnalysisResultFolder := gigahorsePath + "/.temp/" + contract
+	if _, err := os.Stat(contractAnalysisResultFolder); err != nil {
+		cmd := exec.Command(gigahorsePath+"/gigahorse.py", "-C", gigahorsePath+"/logic/taint_analysis.dl", gigahorsePath+"/example/"+contract+".hex")
+		cmd.Run()
+	}
+	taintResultFile := contractAnalysisResultFolder + "/out/taintflow.TaintSink.csv"
+	fd, err := os.Open(taintResultFile)
+	if err != nil {
+		fmt.Println(err)
+		return result
+	}
+	defer fd.Close()
+
+	fileReader := csv.NewReader(fd)
+	taintResult, error := fileReader.ReadAll()
+	if error != nil {
+		fmt.Println(err)
+		return result
+	}
+	for _, line := range taintResult {
+		index := line[2]
+		regex := regexp.MustCompile("ConstantIndex\\((.*?)\\)")
+		matchArr := regex.FindAllSubmatch([]byte(index), -1)
+		for _, matchItem := range matchArr {
+			realIndex, _ := strconv.ParseInt(string(matchItem[1]), 16, 0)
+			if containByList(fuzz.ConvertIntSlice2InterfaceSlice(indexList), realIndex) {
+				result = append(result, line[0])
+			}
+		}
+	}
+	return result
 }
 
 func containByList(list []interface{}, item interface{}) bool {
