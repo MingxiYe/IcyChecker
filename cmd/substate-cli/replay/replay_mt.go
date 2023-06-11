@@ -308,13 +308,31 @@ func replayWithTodMR(block uint64, tx int, substate *research.Substate, taskPool
 		rets  []string
 		err   error
 	)
-	if addrs, msgs, rets, err = fuzz.MsgBuilder(
-		fuzz.ConvertInterfaceSlice2StringSlice(fuzz.GetInnerValueList()),
+
+	contracts2IndexList := make(map[string][]int)
+	// identify storage index dependency
+	for contract, account := range inputAlloc {
+		// contracts2IndexList[contract.Hex()] = make([]int, 0)
+		for key, _ := range account.Storage {
+			keyInt, _ := strconv.ParseInt(key.Hex(), 16, 0)
+			contracts2IndexList[contract.Hex()] = append(contracts2IndexList[contract.Hex()], int(keyInt))
+		}
+	}
+	if addrs, msgs, rets, err = msgbuilder(
 		block,
 		localUsers,
-		localContracts); err != nil {
+		contracts2IndexList,
+		taskPool); err != nil {
 		return fmt.Errorf("error in generating msgs")
 	}
+
+	// if addrs, msgs, rets, err = fuzz.MsgBuilder(
+	// 	fuzz.ConvertInterfaceSlice2StringSlice(fuzz.GetInnerValueList()),
+	// 	block,
+	// 	localUsers,
+	// 	localContracts); err != nil {
+	// 	return fmt.Errorf("error in generating msgs")
+	// }
 
 	// replay original & additional messages
 	for index, msg := range msgs {
@@ -996,7 +1014,7 @@ func initGlobalEnv(ctx *cli.Context, taskPool *research.SubstateTaskPool) error 
 	return nil
 }
 
-func msgbuilder(targetedContracts []string, block uint64, localUsers []string, localContracts2IndexList map[string][]int, taskPool *research.SubstateTaskPool) ([]string, []string, []string, error) {
+func msgbuilder(block uint64, localUsers []string, localContracts2IndexList map[string][]int, taskPool *research.SubstateTaskPool) ([]string, []string, []string, error) {
 	// generate additional messages
 	var (
 		addrs []string
