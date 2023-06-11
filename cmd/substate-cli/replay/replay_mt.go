@@ -698,14 +698,32 @@ func replayWithHook(block uint64, tx int, substate *research.Substate, taskPool 
 		rets            []string
 		err             error
 	)
-	targetedAddress, msgs, rets, err = fuzz.MsgBuilder(
-		fuzz.ConvertInterfaceSlice2StringSlice(fuzz.GetInnerValueList()),
+
+	contracts2IndexList := make(map[string][]int)
+	// identify storage index dependency
+	for contract, account := range inputAlloc {
+		// contracts2IndexList[contract.Hex()] = make([]int, 0)
+		for key, _ := range account.Storage {
+			keyInt, _ := strconv.ParseInt(key.Hex(), 16, 0)
+			contracts2IndexList[contract.Hex()] = append(contracts2IndexList[contract.Hex()], int(keyInt))
+		}
+	}
+	if targetedAddress, msgs, rets, err = msgbuilder(
 		block,
 		localUsers,
-		localContracts)
-	if err != nil {
+		contracts2IndexList,
+		taskPool); err != nil {
 		return fmt.Errorf("error in generating msgs")
 	}
+
+	// targetedAddress, msgs, rets, err = fuzz.MsgBuilder(
+	// 	fuzz.ConvertInterfaceSlice2StringSlice(fuzz.GetInnerValueList()),
+	// 	block,
+	// 	localUsers,
+	// 	localContracts)
+	// if err != nil {
+	// 	return fmt.Errorf("error in generating msgs")
+	// }
 
 	for index, msg := range msgs {
 		var (
